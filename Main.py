@@ -16,7 +16,7 @@ def load_api_keys():
 
 def initialize_gemini(api_keys):
     genai.configure(api_key=api_keys['gemini_api_key'])
-    return genai.GenerativeModel('gemini-2.0-flash')
+    return genai.GenerativeModel('gemini-2.5-flash')
 
 def get_excerpt_by_gemini(gemini_model):
     prompt = """Выбери значительный отрывок из романа "Мастер и Маргарита" Михаила Булгакова (примерно 500-800 слов). 
@@ -74,6 +74,12 @@ def generate_questions_with_gemini(gemini_model, excerpt):
                 if end != -1:
                     response_text = response_text[:end+1]
             
+            # Попытка исправить распространённые ошибки JSON
+            import re
+            response_text = response_text.replace('\n', '')
+            response_text = re.sub(r',\s*}', '}', response_text)
+            response_text = re.sub(r',\s*]', ']', response_text)
+            
             result = json.loads(response_text)
             questions = result.get("questions", [])
             
@@ -84,25 +90,34 @@ def generate_questions_with_gemini(gemini_model, excerpt):
             
         except Exception as e:
             print(f"Попытка {attempt + 1}/{max_retries}: Ошибка при генерации вопросов: {e}")
+            if 'response_text' in locals():
+                print(f"Ответ модели (фрагмент): {response_text[:500]}")
             if "429" in str(e) or "quota" in str(e).lower():
                 wait_time = (attempt + 1) * 60
                 print(f"Превышена квота API. Ожидание {wait_time} секунд...")
                 time.sleep(wait_time)
             else:
                 if attempt == max_retries - 1:
-                    print(f"Ответ модели: {response.text[:200] if 'response' in locals() else 'Нет ответа'}...")
+                    print(f"Ответ модели: {response.text[:500] if 'response' in locals() else 'Нет ответа'}...")
                 break
     
     return []
 
-def get_answers_from_gemini(gemini_model, questions):
+def get_answers_from_gemini(gemini_model, questions, excerpt):
     answers = []
     for i, qa in enumerate(questions):
-        prompt = f"""Ответь на вопрос на основе отрывка из "Мастера и Маргариты":
+        prompt = f"""Ответь на вопрос на основе следующего отрывка из "Мастера и Маргариты":
 
-Вопрос: {qa['question']}
+ОТРЫВОК:
+{excerpt}
 
-Дай развернутый и точный ответ."""
+ВОПРОС: {qa['question']}
+
+ИНСТРУКЦИИ:
+- Отвечай ТОЛЬКО на основе предоставленного отрывка
+- Если в отрывке нет информации для ответа, так и скажи
+- Дай краткий и точный ответ
+- Не добавляй информацию, которой нет в отрывке"""
         
         max_retries = 3
         for attempt in range(max_retries):
@@ -148,9 +163,21 @@ def extract_key_phrases(text):
 def calculate_accuracy_score(model_answer, reference_answer, question):
     base_score = 0.0
     
-    similarity = calculate_text_similarity(model_answer, reference_answer)
-    base_score += similarity * 0.4
+    # Проверка на отказ от ответа
+    refusal_phrases = [
+        "не могу ответить", "нет информации", "нужно больше контекста",
+        "не предоставлен", "нет данных", "не знаю", "отсутствует",
+        "невозможно определить", "не указано", "не упоминается"
+    ]
     
+    if any(phrase in model_answer.lower() for phrase in refusal_phrases):
+        return 0.1  # Очень низкий балл за отказ
+    
+    # Семантическое сходство
+    similarity = calculate_text_similarity(model_answer, reference_answer)
+    base_score += similarity * 0.5
+    
+    # Пересечение ключевых фраз
     model_phrases = extract_key_phrases(model_answer)
     ref_phrases = extract_key_phrases(reference_answer)
     
@@ -158,15 +185,19 @@ def calculate_accuracy_score(model_answer, reference_answer, question):
         phrase_overlap = len(model_phrases.intersection(ref_phrases)) / len(ref_phrases)
         base_score += phrase_overlap * 0.3
     
+    # Релевантность ответа вопросу
     question_words = set(question.lower().split())
     answer_words = set(model_answer.lower().split())
     question_relevance = len(question_words.intersection(answer_words)) / max(len(question_words), 1)
     base_score += question_relevance * 0.2
     
-    if len(model_answer) > 50:
+    # Бонус за развернутость (но не избыточность)
+    if 20 <= len(model_answer) <= 500:
         base_score += 0.1
+    elif len(model_answer) > 1000:
+        base_score -= 0.1  # Штраф за избыточность
     
-    return min(1.0, base_score)
+    return min(1.0, max(0.0, base_score))
 
 def evaluate_with_giskard(reference_qa, model_answers):
     test_data = []
@@ -207,12 +238,19 @@ def evaluate_with_giskard(reference_qa, model_answers):
     scores = []
     base_score = 0.5
     
+    # Подсчитываем результаты тестов Giskard
+    passed_tests = 0
+    total_tests = len(results.results)
+    
     for test_result in results.results:
-        if hasattr(test_result, 'metric') and test_result.metric is not None:
-            if hasattr(test_result, 'passed') and test_result.passed:
-                base_score += 0.1
-            else:
-                base_score -= 0.1
+        if hasattr(test_result, 'passed') and test_result.passed:
+            passed_tests += 1
+    
+    # Корректируем базовый балл на основе результатов тестов
+    if total_tests > 0:
+        test_success_rate = passed_tests / total_tests
+        # Более мягкая корректировка, чтобы ошибки тестов не сильно влияли на общий результат
+        base_score += (test_success_rate - 0.5) * 0.1  # ±0.05 в зависимости от успешности тестов
     
     for i, qa in enumerate(reference_qa):
         accuracy_score = calculate_accuracy_score(
@@ -225,25 +263,32 @@ def evaluate_with_giskard(reference_qa, model_answers):
         
         model_answer = model_answers[i]
         
-        if len(model_answer) > 100:
-            score += 0.05
+        # Проверка длины ответа
+        if 20 <= len(model_answer) <= 500:
+            score += 0.05  # Оптимальная длина
         elif len(model_answer) < 10:
-            score -= 0.1
+            score -= 0.2   # Слишком короткий
+        elif len(model_answer) > 1000:
+            score -= 0.1   # Слишком длинный
         
+        # Проверка на пустой ответ
         if model_answer.strip():
             score += 0.05
         else:
-            score -= 0.2
+            score -= 0.3
         
+        # Проверка на повторяющиеся ответы
         if i > 0 and model_answer == model_answers[i-1]:
-            score -= 0.1
+            score -= 0.15
         
+        # Проверка на низкокачественные фразы
         low_quality_phrases = [
             "не знаю", "нет информации", "нужно больше контекста", 
-            "не могу ответить", "не предоставлен", "нет данных"
+            "не могу ответить", "не предоставлен", "нет данных",
+            "отсутствует", "невозможно определить", "не указано"
         ]
         if any(phrase in model_answer.lower() for phrase in low_quality_phrases):
-            score -= 0.15
+            score -= 0.2
         
         score = max(0.0, min(1.0, score))
         scores.append(score)
@@ -317,7 +362,11 @@ def main():
     print(f"Сгенерировано {len(reference_qa)} вопросов")
     
     print("\nОтправка вопросов в модель Gemini...")
-    model_answers = get_answers_from_gemini(gemini_model, reference_qa)
+    model_answers = get_answers_from_gemini(gemini_model, reference_qa, excerpt)
+
+    # Защита от несоответствия длин списков
+    if len(model_answers) < len(reference_qa):
+        model_answers += ["Ошибка получения ответа"] * (len(reference_qa) - len(model_answers))
     
     print("\nОценка ответов через Giskard...")
     scores, giskard_results = evaluate_with_giskard(reference_qa, model_answers)
@@ -344,14 +393,20 @@ def main():
     
     passed_tests = 0
     failed_tests = 0
-    for test_result in giskard_results.results:
-        if hasattr(test_result, 'passed'):
-            if test_result.passed:
-                passed_tests += 1
-            else:
-                failed_tests += 1
+    print("\nРезультаты тестов Giskard:")
+    for i, test_result in enumerate(giskard_results.results):
+        test_name = getattr(test_result, 'test_name', f'Тест {i+1}')
+        # Проверяем результат теста по содержимому атрибута 'result'
+        result_text = getattr(test_result, 'result', '')
+        is_passed = 'Test succeeded' in str(result_text)
+        if is_passed:
+            passed_tests += 1
+            print(f"  ✅ {test_name}: ПРОЙДЕН")
         else:
             failed_tests += 1
+            print(f"  ❌ {test_name}: НЕ ПРОЙДЕН")
+    
+    print(f"\nИтого: {passed_tests} пройдено, {failed_tests} не пройдено")
     
     results_data = {
         "excerpt": excerpt,
