@@ -162,8 +162,7 @@ def extract_key_phrases(text):
 
 def calculate_accuracy_score(model_answer, reference_answer, question):
     base_score = 0.0
-    
-    # Проверка на отказ от ответа
+
     refusal_phrases = [
         "не могу ответить", "нет информации", "нужно больше контекста",
         "не предоставлен", "нет данных", "не знаю", "отсутствует",
@@ -173,11 +172,11 @@ def calculate_accuracy_score(model_answer, reference_answer, question):
     if any(phrase in model_answer.lower() for phrase in refusal_phrases):
         return 0.1  # Очень низкий балл за отказ
     
-    # Семантическое сходство
+
     similarity = calculate_text_similarity(model_answer, reference_answer)
     base_score += similarity * 0.5
     
-    # Пересечение ключевых фраз
+
     model_phrases = extract_key_phrases(model_answer)
     ref_phrases = extract_key_phrases(reference_answer)
     
@@ -185,13 +184,13 @@ def calculate_accuracy_score(model_answer, reference_answer, question):
         phrase_overlap = len(model_phrases.intersection(ref_phrases)) / len(ref_phrases)
         base_score += phrase_overlap * 0.3
     
-    # Релевантность ответа вопросу
+
     question_words = set(question.lower().split())
     answer_words = set(model_answer.lower().split())
     question_relevance = len(question_words.intersection(answer_words)) / max(len(question_words), 1)
     base_score += question_relevance * 0.2
     
-    # Бонус за развернутость (но не избыточность)
+
     if 20 <= len(model_answer) <= 500:
         base_score += 0.1
     elif len(model_answer) > 1000:
@@ -238,7 +237,7 @@ def evaluate_with_giskard(reference_qa, model_answers):
     scores = []
     base_score = 0.5
     
-    # Подсчитываем результаты тестов Giskard
+
     passed_tests = 0
     total_tests = len(results.results)
     
@@ -246,11 +245,11 @@ def evaluate_with_giskard(reference_qa, model_answers):
         if hasattr(test_result, 'passed') and test_result.passed:
             passed_tests += 1
     
-    # Корректируем базовый балл на основе результатов тестов
+
     if total_tests > 0:
         test_success_rate = passed_tests / total_tests
-        # Более мягкая корректировка, чтобы ошибки тестов не сильно влияли на общий результат
-        base_score += (test_success_rate - 0.5) * 0.1  # ±0.05 в зависимости от успешности тестов
+
+        base_score += (test_success_rate - 0.5) * 0.1
     
     for i, qa in enumerate(reference_qa):
         accuracy_score = calculate_accuracy_score(
@@ -263,25 +262,22 @@ def evaluate_with_giskard(reference_qa, model_answers):
         
         model_answer = model_answers[i]
         
-        # Проверка длины ответа
+
         if 20 <= len(model_answer) <= 500:
             score += 0.05  # Оптимальная длина
         elif len(model_answer) < 10:
             score -= 0.2   # Слишком короткий
         elif len(model_answer) > 1000:
             score -= 0.1   # Слишком длинный
-        
-        # Проверка на пустой ответ
+
         if model_answer.strip():
             score += 0.05
         else:
             score -= 0.3
-        
-        # Проверка на повторяющиеся ответы
+
         if i > 0 and model_answer == model_answers[i-1]:
             score -= 0.15
-        
-        # Проверка на низкокачественные фразы
+
         low_quality_phrases = [
             "не знаю", "нет информации", "нужно больше контекста", 
             "не могу ответить", "не предоставлен", "нет данных",
@@ -364,7 +360,6 @@ def main():
     print("\nОтправка вопросов в модель Gemini...")
     model_answers = get_answers_from_gemini(gemini_model, reference_qa, excerpt)
 
-    # Защита от несоответствия длин списков
     if len(model_answers) < len(reference_qa):
         model_answers += ["Ошибка получения ответа"] * (len(reference_qa) - len(model_answers))
     
@@ -396,7 +391,7 @@ def main():
     print("\nРезультаты тестов Giskard:")
     for i, test_result in enumerate(giskard_results.results):
         test_name = getattr(test_result, 'test_name', f'Тест {i+1}')
-        # Проверяем результат теста по содержимому атрибута 'result'
+
         result_text = getattr(test_result, 'result', '')
         is_passed = 'Test succeeded' in str(result_text)
         if is_passed:
