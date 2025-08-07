@@ -40,8 +40,13 @@ Thumbs.db
 
 # Project specific
 *.json
-!Key.json
 !requirements.txt
+
+# API Keys and sensitive data
+Key.json
+*.key
+*.pem
+.env
 
 # Logs
 *.log
