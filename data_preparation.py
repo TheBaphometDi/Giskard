@@ -9,7 +9,8 @@ def load_api_keys():
     with open('Key.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
         return {
-            'gemini_api_key': data.get('gemini_api_key')
+            'gemini_api_key': data.get('gemini_api_key'),
+            'openai_api_key': data.get('openai_api_key')
         }
 
 def initialize_gemini(api_keys):

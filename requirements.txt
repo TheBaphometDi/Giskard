@@ -1,3 +1,9 @@
-giskard
-pandas
-google-generativeai==0.3.2 
+giskard>=2.0.0
+pandas>=1.5.0
+google-generativeai==0.3.2
+numpy>=1.21.0
+scikit-learn>=1.0.0
+fastembed>=1.0.0
+openai>=1.0.0
+scipy>=1.7.0
+umap-learn>=0.5.0 
