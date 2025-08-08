@@ -6,12 +6,7 @@ def main():
     print("=" * 60)
     print("ПОЛНЫЙ РАБОЧИЙ ПРОЦЕСС: GEMINI + GISCARD")
     print("=" * 60)
-    print("Использует модульную архитектуру:")
-    print("1. data_preparation.py: получение отрывка из романа через Gemini")
-    print("2. giskard_question_generation.py: генерация вопросов через Giskard")
-    print("3. gemini_answer_generation.py: генерация ответов через Gemini")
-    print("4. giskard_evaluation.py: оценка ответов с помощью метрик Giskard")
-    print("=" * 60)
+
     
     print("\n1️⃣ Запуск генерации вопросов через Giskard...")
     result = run_giskard_generation(return_data=True)
