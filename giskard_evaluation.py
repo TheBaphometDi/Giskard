@@ -15,7 +15,6 @@ def setup_giskard_openai():
         if 'openai_api_key' in api_keys and api_keys['openai_api_key']:
             os.environ['OPENAI_API_KEY'] = api_keys['openai_api_key']
             giskard.llm.set_llm_api("openai")
-            print("✅ Настроен OpenAI для генерации вопросов")
             return True
         else:
             print("⚠️ openai_api_key не найден в Key.json")
@@ -31,7 +30,6 @@ def setup_giskard_embeddings():
         embeddings = try_get_fastembed_embeddings()
         if embeddings:
             giskard.llm.embeddings.set_default_embedding(embeddings)
-            print("✅ Настроена модель эмбеддингов FastEmbed")
             return True
         else:
             print("⚠️ FastEmbed недоступен, попробуем установить...")
