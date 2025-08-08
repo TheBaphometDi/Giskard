@@ -150,24 +150,19 @@ def prepare_test_data():
     print("=" * 50)
     print("ПОДГОТОВКА ДАННЫХ ДЛЯ ТЕСТИРОВАНИЯ")
     print("=" * 50)
-    print("\nЗагрузка API ключей...")
     api_keys = load_api_keys()
-    print("Инициализация Gemini...")
     gemini_model = initialize_gemini(api_keys)
-    print("Получение отрывка из 'Мастера и Маргариты'...")
     excerpt = get_excerpt_by_gemini(gemini_model)
     if not excerpt:
         print("ОШИБКА: Не удалось получить отрывок")
         return None, None, None
     print(f"Выбранный отрывок:\n{excerpt}\n")
     print("-" * 50)
-    print("Генерация вопросов и ответов...")
     reference_qa = generate_questions_with_gemini(gemini_model, excerpt)
     if not reference_qa:
         print("ОШИБКА: Не удалось сгенерировать вопросы")
         return None, None, None
     print(f"Сгенерировано {len(reference_qa)} валидных вопросов")
-    print("\nОтправка вопросов в модель Gemini...")
     model_answers = get_answers_from_gemini(gemini_model, reference_qa, excerpt)
     if len(model_answers) < len(reference_qa):
         model_answers += ["Ошибка получения ответа"] * (len(reference_qa) - len(model_answers))
