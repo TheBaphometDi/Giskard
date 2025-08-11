@@ -6,7 +6,7 @@ from data_preparation import load_api_keys, initialize_gemini
 
 def generate_gemini_answers(gemini_model, questions, excerpt):
     print("=" * 60)
-    print("ГЕНЕРАЦИЯ ОТВЕТОВ GEMINI")
+    print("ГЕНЕРАЦИЯ ОТВЕТОВ ЧЕРЕЗ GEMINI")
     print("=" * 60)
     
     answers = []
@@ -84,7 +84,7 @@ def generate_gemini_answers(gemini_model, questions, excerpt):
                         })
                     break
     
-    print(f"✅ Успешно сгенерировано {len(answers)} ответов")
+    print(f"✅ Успешно сгенерировано {len(answers)} ответов через Gemini")
     return answers
 
 
@@ -107,7 +107,8 @@ def save_gemini_answers(answers, filename=None):
 
 
 def run_gemini_answer_generation(questions, excerpt):
-    print("Запуск генерации ответов Gemini...")
+    """Основная функция для генерации ответов через Gemini"""
+    print("Запуск генерации ответов через Gemini...")
     
     api_keys = load_api_keys()
     gemini_model = initialize_gemini(api_keys)
@@ -116,7 +117,7 @@ def run_gemini_answer_generation(questions, excerpt):
     
     if answers:
         filename = save_gemini_answers(answers)
-        print(f"\nРезультаты сохранены в файл: {filename}")
+        print(f"\n✅ Ответы Gemini сохранены в файл: {filename}")
         
         print("\nПримеры ответов Gemini:")
         print("-" * 40)

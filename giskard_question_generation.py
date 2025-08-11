@@ -90,14 +90,7 @@ def generate_questions_with_giskard(excerpt):
         print(f"Создано {len(knowledge_base.documents)} фрагментов текста")
     else:
         print("База знаний успешно создана.")
-    question_generators = [
-        simple_questions,
-        complex_questions,
-        situational_questions,
-        double_questions,
-        conversational_questions,
-        distracting_questions
-    ]
+    
     print("\nГенерация тестового набора вопросов через Giskard...")
     try:
         testset = generate_testset(
@@ -146,10 +139,12 @@ def save_giskard_questions(questions, filename=None):
     return filename
 
 
+# Импорт функций для работы с Gemini только для получения отрывка
 from data_preparation import load_api_keys, initialize_gemini, get_excerpt_by_gemini
 
 
 def get_excerpt_from_gemini():
+    """Получение отрывка из романа через Gemini - единственная функция Gemini в этом модуле"""
     try:
         api_keys = load_api_keys()
         gemini_model = initialize_gemini(api_keys)
@@ -169,13 +164,16 @@ def run_giskard_generation(return_data=False):
     if not excerpt:
         print("ОШИБКА: Не удалось получить отрывок через Gemini")
         return (None, None) if return_data else None
-    print(f"Получен отрывок длиной {len(excerpt)} символов")
+    print(f"✅ Отрывок получен через Gemini (длина: {len(excerpt)} символов)")
+    
+    print("\nГенерация вопросов через Giskard...")
     questions = generate_questions_with_giskard(excerpt)
     if not questions:
-        print("ОШИБКА: Не удалось сгенерировать вопросы")
+        print("ОШИБКА: Не удалось сгенерировать вопросы через Giskard")
         return (None, excerpt) if return_data else None
+    
     filename = save_giskard_questions(questions)
-    print(f"\nРезультаты сохранены в файл: {filename}")
+    print(f"\n✅ Вопросы сгенерированы через Giskard и сохранены в файл: {filename}")
     print("\nПримеры сгенерированных вопросов:")
     print("-" * 40)
     for i, qa in enumerate(questions[:5]):
