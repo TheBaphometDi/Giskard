@@ -119,12 +119,6 @@ def run_gemini_answer_generation(questions, excerpt):
         filename = save_gemini_answers(answers)
         print(f"\n✅ Ответы Gemini сохранены в файл: {filename}")
         
-        print("\nПримеры ответов Gemini:")
-        print("-" * 40)
-        for i, answer in enumerate(answers[:3]):
-            print(f"{i + 1}. Вопрос: {answer['question']}")
-            print(f"   Ответ Gemini: {answer['gemini_answer']}")
-            print()
     
     return answers
 
