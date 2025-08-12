@@ -12,6 +12,7 @@ from giskard.rag.question_generators import (
 )
 from datetime import datetime
 
+#ручное создание бз ибо гискард криво парсирует вопросы и ответы
 def create_knowledge_base_from_text(text: str) -> KnowledgeBase:
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     chunks = paragraphs if len(paragraphs) >= 3 else []
