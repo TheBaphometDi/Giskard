@@ -1,12 +1,12 @@
 import json
 import time
 from datetime import datetime
-from data_preparation import load_api_keys, initialize_gemini
+from data_preparation import load_api_keys, initialize_text_model
 
 
-def generate_gemini_answers(gemini_model, questions, excerpt):
+def generate_answers(model, questions, excerpt):
     print("=" * 60)
-    print("ГЕНЕРАЦИЯ ОТВЕТОВ ЧЕРЕЗ GEMINI")
+    print("ГЕНЕРАЦИЯ ОТВЕТОВ")
     print("=" * 60)
     
     answers = []
@@ -31,9 +31,9 @@ def generate_gemini_answers(gemini_model, questions, excerpt):
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                response = gemini_model.generate_content(prompt)
+                response = model.generate_content(prompt)
                 answer = response.text.strip()
-                
+
                 if answer and len(answer) > 10:
                     low_quality_indicators = [
                         "не могу ответить", "нет информации", "нужно больше контекста",
@@ -41,7 +41,7 @@ def generate_gemini_answers(gemini_model, questions, excerpt):
                         "невозможно определить", "не указано", "не упоминается"
                     ]
                     is_low_quality = any(indicator in answer.lower() for indicator in low_quality_indicators)
-                    
+
                     if not is_low_quality:
                         answers.append({
                             'question': question,
@@ -84,17 +84,17 @@ def generate_gemini_answers(gemini_model, questions, excerpt):
                         })
                     break
     
-    print(f"✅ Успешно сгенерировано {len(answers)} ответов через Gemini")
+    print(f"✅ Успешно сгенерировано {len(answers)} ответов")
     return answers
 
 
-def save_gemini_answers(answers, filename=None):
+def save_answers(answers, filename=None):
     if filename is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"gemini_answers_{timestamp}.json"
+        filename = f"answers_{timestamp}.json"
     
     data = {
-        "generator": "Gemini",
+        "generator": "LLM",
         "timestamp": datetime.now().isoformat(),
         "total_answers": len(answers),
         "answers": answers
@@ -106,30 +106,18 @@ def save_gemini_answers(answers, filename=None):
     return filename
 
 
-def run_gemini_answer_generation(questions, excerpt):
-    """Основная функция для генерации ответов через Gemini"""
-    print("Запуск генерации ответов через Gemini...")
+def run_answer_generation(questions, excerpt):
+    print("Запуск генерации ответов...")
     
     api_keys = load_api_keys()
-    gemini_model = initialize_gemini(api_keys)
+    model = initialize_text_model(api_keys)
     
-    answers = generate_gemini_answers(gemini_model, questions, excerpt)
+    answers = generate_answers(model, questions, excerpt)
     
     if answers:
-        filename = save_gemini_answers(answers)
-        print(f"\n✅ Ответы Gemini сохранены в файл: {filename}")
+        filename = save_answers(answers)
+        print(f"\n✅ Ответы сохранены в файл: {filename}")
         
     
     return answers
-
-
-if __name__ == "__main__":
-    test_questions = [
-        {
-            'question': 'Какую истину Иешуа сообщил прокуратору в разговоре?',
-            'answer': 'Истина в том, что у тебя сейчас болит голова, и она болит так сильно, что ты малодушно помышляешь о смерти.'
-        }
-    ]
-    test_excerpt = "Тестовый отрывок из романа"
-    answers = run_gemini_answer_generation(test_questions, test_excerpt)
-    print(f"Сгенерировано ответов: {len(answers)}")
+    

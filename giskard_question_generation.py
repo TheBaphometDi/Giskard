@@ -1,7 +1,6 @@
 import json
-import pandas as pd
-import giskard
 import os
+import pandas as pd
 from giskard.rag import generate_testset, KnowledgeBase
 from giskard.rag.question_generators import (
     simple_questions,
@@ -13,84 +12,54 @@ from giskard.rag.question_generators import (
 )
 from datetime import datetime
 
+def create_knowledge_base_from_text(text: str) -> KnowledgeBase:
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    chunks = paragraphs if len(paragraphs) >= 3 else []
 
-def setup_giskard_openai():
-    try:
-        from data_preparation import load_api_keys
-        api_keys = load_api_keys()
-        if 'openai_api_key' in api_keys and api_keys['openai_api_key']:
-            os.environ['OPENAI_API_KEY'] = api_keys['openai_api_key']
-            giskard.llm.set_llm_api("openai")
-            return True
+    if not chunks:
+        words = text.split()
+        chunk_size = 120
+        chunks = [' '.join(words[i:i + chunk_size]).strip() for i in range(0, len(words), chunk_size)]
+        chunks = [c for c in chunks if c]
+
+    if len(chunks) < 2 and text:
+        lines = [l.strip() for l in text.split('\n') if l.strip()]
+        if len(lines) >= 2:
+            mid = len(lines) // 2
+            chunks = [' '.join(lines[:mid]).strip(), ' '.join(lines[mid:]).strip()]
         else:
-            print("⚠️ openai_api_key не найден в Key.json")
-            return False
-    except Exception as e:
-        print(f"⚠️ Ошибка настройки OpenAI: {e}")
-        return False
+            mid = max(200, len(text) // 2)
+            chunks = [text[:mid].strip(), text[mid:].strip()]
 
-
-def setup_giskard_embeddings():
-    try:
-        from giskard.llm.embeddings import try_get_fastembed_embeddings
-        embeddings = try_get_fastembed_embeddings()
-        if embeddings:
-            giskard.llm.embeddings.set_default_embedding(embeddings)
-            return True
-        else:
-            print("⚠️ FastEmbed недоступен, попробуем установить...")
-            return False
-    except Exception as e:
-        print(f"⚠️ Предупреждение: Не удалось настроить эмбеддинги: {e}")
-        print("💡 Установите зависимости: pip install fastembed")
-        return False
-
-
-def create_knowledge_base_from_text(text):
-    chunks = []
-    words = text.split()
-    chunk_size = 80
-    for i in range(0, len(words), chunk_size):
-        chunk = ' '.join(words[i:i + chunk_size])
-        if chunk.strip():
-            chunks.append(chunk)
-    
-    if len(chunks) < 8:
-        extended_chunks = chunks * 4
-    elif len(chunks) < 15:
-        extended_chunks = chunks * 2
-    else:
-        extended_chunks = chunks
-    
     df = pd.DataFrame({
-        'content': extended_chunks,
-        'source': 'Мастер и Маргарита'
+        'id': [f'doc_{i}' for i in range(len(chunks))],
+        'content': chunks,
+        'source': ['Мастер и Маргарита'] * len(chunks)
     })
     return KnowledgeBase(df)
 
 
-def generate_questions_with_giskard(excerpt):
+def generate_questions(excerpt):
     print("=" * 60)
     print("ГЕНЕРАЦИЯ ВОПРОСОВ ЧЕРЕЗ GISCARD")
     print("=" * 60)
-    print("Настройка OpenAI для генерации вопросов...")
-    if not setup_giskard_openai():
-        print("❌ Не удалось настроить OpenAI. Проверьте наличие openai_api_key в Key.json")
-        return []
-    print("Настройка модели эмбеддингов...")
-    if not setup_giskard_embeddings():
-        print("❌ Не удалось настроить эмбеддинги. Попробуйте установить зависимости:")
-        print("   pip install fastembed")
-        return []
-    print("Создание базы знаний...")
+    print("Создание базы знаний (ручное разбиение и индексация)...")
     knowledge_base = create_knowledge_base_from_text(excerpt)
     if hasattr(knowledge_base, 'documents'):
         print(f"Создано {len(knowledge_base.documents)} фрагментов текста")
     else:
         print("База знаний успешно создана.")
-    
-    print("\nГенерация тестового набора вопросов через Giskard...")
+
+    print("\nГенерация тестового набора вопросов...")
     try:
+        if not os.environ.get('OPENAI_API_KEY'):
+            try:
+                from data_preparation import load_api_keys
+                keys = load_api_keys()
+                if keys.get('openai_api_key'):
+                    os.environ['OPENAI_API_KEY'] = keys['openai_api_key']
+            except Exception:
+                pass
         testset = generate_testset(
             knowledge_base=knowledge_base,
             num_questions=20,
@@ -122,7 +91,7 @@ def generate_questions_with_giskard(excerpt):
         return []
 
 
-def save_giskard_questions(questions, filename=None):
+def save_questions(questions, filename=None):
     if filename is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"giskard_questions_{timestamp}.json"
@@ -138,40 +107,39 @@ def save_giskard_questions(questions, filename=None):
 
 
 # Импорт функций для работы с Gemini только для получения отрывка
-from data_preparation import load_api_keys, initialize_gemini, get_excerpt_by_gemini
+from data_preparation import load_api_keys, initialize_text_model, get_excerpt
 
 
-def get_excerpt_from_gemini():
-    """Получение отрывка из романа через Gemini - единственная функция Gemini в этом модуле"""
+def fetch_excerpt():
     try:
         api_keys = load_api_keys()
-        gemini_model = initialize_gemini(api_keys)
-        excerpt = get_excerpt_by_gemini(gemini_model)
+        model = initialize_text_model(api_keys)
+        excerpt = get_excerpt(model)
         return excerpt
     except Exception as e:
-        print(f"Ошибка при получении отрывка через Gemini: {e}")
+        print(f"Ошибка при получении отрывка: {e}")
         return None
 
 
-def run_giskard_generation(return_data=False):
+def run_question_generation(return_data=False):
     print("=" * 60)
     print("ГЕНЕРАЦИЯ ВОПРОСОВ ЧЕРЕЗ GISCARD")
     print("=" * 60)
-    print("Получение отрывка из романа через Gemini...")
-    excerpt = get_excerpt_from_gemini()
+    print("Получение отрывка из романа...")
+    excerpt = fetch_excerpt()
     if not excerpt:
         print("ОШИБКА: Не удалось получить отрывок через Gemini")
         return (None, None) if return_data else None
-    print(f"✅ Отрывок получен через Gemini (длина: {len(excerpt)} символов)")
-    
-    print("\nГенерация вопросов через Giskard...")
-    questions = generate_questions_with_giskard(excerpt)
+    print(f"✅ Отрывок получен (длина: {len(excerpt)} символов)")
+
+    print("\nГенерация вопросов...")
+    questions = generate_questions(excerpt)
     if not questions:
         print("ОШИБКА: Не удалось сгенерировать вопросы через Giskard")
         return (None, excerpt) if return_data else None
-    
-    filename = save_giskard_questions(questions)
-    print(f"\n✅ Вопросы сгенерированы через Giskard и сохранены в файл: {filename}")
+
+    filename = save_questions(questions)
+    print(f"\n✅ Вопросы сгенерированы и сохранены в файл: {filename}")
     print("\nПримеры сгенерированных вопросов:")
     print("-" * 40)
     for i, qa in enumerate(questions[:5]):
@@ -184,5 +152,3 @@ def run_giskard_generation(return_data=False):
     return filename
 
 
-if __name__ == "__main__":
-    run_giskard_generation()
